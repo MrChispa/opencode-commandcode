@@ -83,7 +83,7 @@ cp plugins/commandcode-models.ts ~/.config/opencode/plugins/
 ## Security notes
 
 - **Never commit your real API key.** This repo only carries the installer, the plugin and docs; your key lives only inside `~/.config/opencode/secrets/commandcode-key`.
-- The repo is **private** — add friends as collaborators via GitHub → Settings → Collaborators, or clone over SSH with the URL above.
+- The repo is **private** — add friends as collaborators via GitHub → Settings → Collaborators, or with `gh repo add-collaborator <user>`. They clone it over HTTPS (GitHub login is enough, no SSH key needed).
 - Why a separate secrets file: the OpenCode docs recommend `{file:path}` substitution for API keys instead of `{env:VAR}`, so the provider works however you launch OpenCode (terminal, GUI, manager), and the key stays out of your main config.
 
 ## Layout
