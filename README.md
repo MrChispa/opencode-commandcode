@@ -19,7 +19,7 @@ Connect **Command Code** (OpenAI-compatible) to [OpenCode](https://opencode.ai) 
 ## Install (recommended)
 
 ```bash
-git clone git@github.com:MrChispa/opencode-commandcode.git
+git clone https://github.com/MrChispa/opencode-commandcode.git
 cd opencode-commandcode
 ./install.sh
 ```
