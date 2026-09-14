@@ -6,7 +6,7 @@
       "name": "Command Code",
       "options": {
         "baseURL": "https://api.commandcode.ai/provider/v1",
-        "apiKey": "{file:~/.config/opencode/secrets/commandcode-key}"
+        "apiKey": "user_YOUR_API_KEY_HERE"
       }
     },
     "commandcode-anthropic": {
@@ -14,7 +14,7 @@
       "name": "Command Code (Claude)",
       "options": {
         "baseURL": "https://api.commandcode.ai/provider/v1",
-        "apiKey": "{file:~/.config/opencode/secrets/commandcode-key}"
+        "apiKey": "user_YOUR_API_KEY_HERE"
       }
     }
   }

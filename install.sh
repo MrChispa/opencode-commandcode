@@ -4,10 +4,10 @@
 #
 # Sets up Command Code as an OpenCode custom provider with auto-syncing models.
 #   1. prompts for your Command Code API key (or reuses $CMD_API_KEY)
-#   2. writes the key to a private 0600 file (out of opencode.json)
+#   2. writes the key to a private 0600 file (for plugin probing)
 #   3. copies the model-sync plugin into the OpenCode plugin dir
 #   4. installs required npm dependencies (@ai-sdk/openai-compatible + @ai-sdk/anthropic)
-#   5. merges the provider blocks into your opencode.json
+#   5. merges the provider blocks into your opencode.json (with direct API key)
 #
 # Usage: ./install.sh        (then restart OpenCode, pick a model in /models)
 #
@@ -81,9 +81,9 @@ fi
 echo "==> 5/5 provider config"
 CONFIG_FILE="$CONFIG_DIR/opencode.json"
 if [[ -f "$CONFIG_FILE" ]]; then
-  if python3 - "$CONFIG_FILE" "$BASE_URL" "$SECRETS_ABS" <<'PY'
+  if python3 - "$CONFIG_FILE" "$BASE_URL" "$CMD_API_KEY" <<'PY'
 import json, sys
-config_file, base_url, secrets_ref = sys.argv[1], sys.argv[2], sys.argv[3]
+config_file, base_url, api_key = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(config_file) as f:
     cfg = json.load(f)
 provider = cfg.setdefault("provider", {})
@@ -92,12 +92,12 @@ provider = cfg.setdefault("provider", {})
 if "commandcode" in provider:
     provider["commandcode"].setdefault("options", {})
     provider["commandcode"]["options"]["baseURL"] = base_url
-    provider["commandcode"]["options"]["apiKey"] = "{file:" + secrets_ref + "}"
+    provider["commandcode"]["options"]["apiKey"] = api_key
 else:
     provider["commandcode"] = {
         "npm": "@ai-sdk/openai-compatible",
         "name": "Command Code",
-        "options": {"baseURL": base_url, "apiKey": "{file:" + secrets_ref + "}"},
+        "options": {"baseURL": base_url, "apiKey": api_key},
     }
 
 # Anthropic provider (Claude models — API requires /messages endpoint)
@@ -105,7 +105,7 @@ if "commandcode-anthropic" not in provider:
     provider["commandcode-anthropic"] = {
         "npm": "@ai-sdk/anthropic",
         "name": "Command Code (Claude)",
-        "options": {"baseURL": base_url, "apiKey": "{file:" + secrets_ref + "}"},
+        "options": {"baseURL": base_url, "apiKey": api_key},
     }
 
 with open(config_file, "w") as f:
@@ -130,7 +130,7 @@ else
       "name": "Command Code",
       "options": {
         "baseURL": "$BASE_URL",
-        "apiKey": "{file:$SECRETS_ABS}"
+        "apiKey": "$CMD_API_KEY"
       }
     },
     "commandcode-anthropic": {
@@ -138,7 +138,7 @@ else
       "name": "Command Code (Claude)",
       "options": {
         "baseURL": "$BASE_URL",
-        "apiKey": "{file:$SECRETS_ABS}"
+        "apiKey": "$CMD_API_KEY"
       }
     }
   }
