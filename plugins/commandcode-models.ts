@@ -61,7 +61,10 @@ async function fetchCatalog(): Promise<Array<{ id: string; name: string }>> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const body = (await res.json()) as { data?: Array<{ id: string; name?: string }> }
   const list = Array.isArray(body) ? body : body.data ?? []
-  return list.map((m) => ({ id: m.id, name: displayName(m.id, m.name || m.id) }))
+  return list.map((m) => {
+    const name = displayName(m.id, m.name || m.id)
+    return { id: m.id, name }
+  })
 }
 
 // ─── Probe ──────────────────────────────────────────────────────────────────
@@ -189,8 +192,8 @@ async function syncModels(
   // Always retry rate-limited models from previous run (might be available now)
   // Rate-limited models are already in openai/anthropic cache — we just verify they still work
   const allCached = [
-    ...Object.keys(openai).map((id) => ({ id, format: "openai" as const })),
-    ...Object.keys(anthropic).map((id) => ({ id, format: "anthropic" as const })),
+    ...Object.entries(openai).map(([id, v]) => ({ id, format: "openai" as const, name: v.name })),
+    ...Object.entries(anthropic).map(([id, v]) => ({ id, format: "anthropic" as const, name: v.name })),
   ]
 
   // Re-probe a sample to keep the list fresh (every 4th model, to stay fast)
