@@ -63,7 +63,7 @@ async function fetchCatalog(): Promise<Array<{ id: string; name: string }>> {
 async function probeModel(
   id: string,
   apiKey: string,
-): Promise<ModelFormat | null> => {
+): Promise<ModelFormat | null> {
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
