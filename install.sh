@@ -6,7 +6,8 @@
 #   1. prompts for your Command Code API key (or reuses $CMD_API_KEY)
 #   2. writes the key to a private 0600 file (out of opencode.json)
 #   3. copies the model-sync plugin into the OpenCode plugin dir
-#   4. merges the provider block into your opencode.json
+#   4. installs required npm dependencies (@ai-sdk/openai-compatible + @ai-sdk/anthropic)
+#   5. merges the provider blocks into your opencode.json
 #
 # Usage: ./install.sh        (then restart OpenCode, pick a model in /models)
 #
@@ -28,7 +29,7 @@ if [[ ! -f "$PLUGIN_SRC" ]]; then
   exit 1
 fi
 
-echo "==> 1/4 API key"
+echo "==> 1/5 API key"
 if [[ -z "${CMD_API_KEY:-}" ]]; then
   read -r -s -p "Paste your Command Code API key (starts with 'user_'): " CMD_API_KEY
   echo
@@ -39,19 +40,45 @@ if [[ -z "${CMD_API_KEY:-}" ]]; then
 fi
 CMD_API_KEY="$(printf '%s' "$CMD_API_KEY" | tr -d '[:space:]')"
 
-echo "==> 2/4 secrets file"
+echo "==> 2/5 secrets file"
 mkdir -p "$SECRETS_DIR"
 umask 077
 printf '%s' "$CMD_API_KEY" > "$SECRETS_FILE"
 chmod 600 "$SECRETS_FILE"
 echo "  wrote ${SECRETS_FILE/#$HOME/\~} (chmod 600)"
 
-echo "==> 3/4 plugin"
+echo "==> 3/5 plugin"
 mkdir -p "$CONFIG_DIR/plugins"
 cp "$PLUGIN_SRC" "$CONFIG_DIR/plugins/commandcode-models.ts"
 echo "  copied -> ${CONFIG_DIR/#$HOME/\~}/plugins/commandcode-models.ts"
 
-echo "==> 4/4 provider config"
+echo "==> 4/5 npm dependencies"
+cd "$CONFIG_DIR"
+if [[ ! -f package.json ]]; then
+  cat > package.json <<'EOF'
+{
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.18.18",
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@ai-sdk/anthropic": "^2.0.0"
+  }
+}
+EOF
+  echo "  created package.json"
+else
+  echo "  package.json exists, ensuring dependencies..."
+fi
+
+if command -v bun &>/dev/null; then
+  bun install 2>&1 | tail -3
+elif command -v npm &>/dev/null; then
+  npm install 2>&1 | tail -3
+else
+  echo "  WARNING: neither bun nor npm found. Install manually:"
+  echo "    cd $CONFIG_DIR && bun install"
+fi
+
+echo "==> 5/5 provider config"
 CONFIG_FILE="$CONFIG_DIR/opencode.json"
 if [[ -f "$CONFIG_FILE" ]]; then
   if python3 - "$CONFIG_FILE" "$BASE_URL" "$SECRETS_ABS" <<'PY'
@@ -60,6 +87,8 @@ config_file, base_url, secrets_ref = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(config_file) as f:
     cfg = json.load(f)
 provider = cfg.setdefault("provider", {})
+
+# OpenAI-compatible provider (GPT, Qwen, Kimi, DeepSeek, etc.)
 if "commandcode" in provider:
     provider["commandcode"].setdefault("options", {})
     provider["commandcode"]["options"]["baseURL"] = base_url
@@ -70,31 +99,25 @@ else:
         "name": "Command Code",
         "options": {"baseURL": base_url, "apiKey": "{file:" + secrets_ref + "}"},
     }
+
+# Anthropic provider (Claude models — API requires /messages endpoint)
+if "commandcode-anthropic" not in provider:
+    provider["commandcode-anthropic"] = {
+        "npm": "@ai-sdk/anthropic",
+        "name": "Command Code (Claude)",
+        "options": {"baseURL": base_url, "apiKey": "{file:" + secrets_ref + "}"},
+    }
+
 with open(config_file, "w") as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
     f.write("\n")
-print("  merged provider.commandcode into", config_file.replace(__import__("os").path.expanduser("~"), "~"))
+print("  merged commandcode + commandcode-anthropic into", config_file.replace(__import__("os").path.expanduser("~"), "~"))
 PY
   then
     :
   else
     echo "ERROR: could not auto-merge opencode.json." >&2
-    echo "Add the provider block below to $CONFIG_FILE manually:" >&2
-    cat <<BLOCK >&2
-{
-  "\$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "commandcode": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Command Code",
-      "options": {
-        "baseURL": "$BASE_URL",
-        "apiKey": "{file:$SECRETS_ABS}"
-      }
-    }
-  }
-}
-BLOCK
+    echo "Add both provider blocks manually — see opencode.json.example" >&2
     exit 1
   fi
 else
@@ -109,6 +132,14 @@ else
         "baseURL": "$BASE_URL",
         "apiKey": "{file:$SECRETS_ABS}"
       }
+    },
+    "commandcode-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "Command Code (Claude)",
+      "options": {
+        "baseURL": "$BASE_URL",
+        "apiKey": "{file:$SECRETS_ABS}"
+      }
     }
   }
 }
@@ -118,5 +149,5 @@ fi
 
 echo
 echo "DONE. Restart OpenCode, then run /models and pick a Command Code model."
-echo "The model list is fetched automatically on startup (public catalog endpoint);"
-echo "the API key is only needed for chat requests."
+echo "The model list is probed automatically on startup — only models your plan"
+echo "can actually use will appear. Claude models use the Anthropic endpoint."

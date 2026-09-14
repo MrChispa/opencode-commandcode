@@ -8,6 +8,14 @@
         "baseURL": "https://api.commandcode.ai/provider/v1",
         "apiKey": "{file:~/.config/opencode/secrets/commandcode-key}"
       }
+    },
+    "commandcode-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "name": "Command Code (Claude)",
+      "options": {
+        "baseURL": "https://api.commandcode.ai/provider/v1",
+        "apiKey": "{file:~/.config/opencode/secrets/commandcode-key}"
+      }
     }
   }
 }
