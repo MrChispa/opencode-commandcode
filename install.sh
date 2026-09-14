@@ -59,8 +59,8 @@ if [[ ! -f package.json ]]; then
 {
   "dependencies": {
     "@opencode-ai/plugin": "^1.18.18",
-    "@ai-sdk/openai-compatible": "^1.0.0",
-    "@ai-sdk/anthropic": "^2.0.0"
+    "@ai-sdk/openai-compatible": "^3.0.48",
+    "@ai-sdk/anthropic": "^4.0.53"
   }
 }
 EOF
