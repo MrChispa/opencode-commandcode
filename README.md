@@ -8,6 +8,7 @@ Connect **Command Code** to [OpenCode](https://opencode.ai) with a model list th
 - A [plugin](plugins/commandcode-models.ts) probes each model in the Command Code catalog on every OpenCode start, detects which ones your plan can use, and injects only the working ones.
 - Claude models automatically use the Anthropic Messages endpoint (`/messages`); everything else uses OpenAI Chat Completions.
 - Rate-limited models (e.g. DeepSeek when upstream is busy) still appear in the list — they're retried automatically each startup.
+- Free-tier models (e.g. `LongCat 2.0 (Free)`) are labeled with a `(Free)` suffix in the model picker.
 - The model list is cached to `~/.cache/opencode/commandcode-models.json`; if the API is unreachable, the last known good list is used.
 - Your API key stays out of `opencode.json` — it lives in a private, `0600` file.
 
@@ -22,7 +23,8 @@ Connect **Command Code** to [OpenCode](https://opencode.ai) with a model list th
 | 5 | Rate-limited models (temporarily unavailable) are included — re-probed periodically |
 | 6 | Working OpenAI-format models → `commandcode` provider |
 | 7 | Working Anthropic-format models (Claude) → `commandcode-anthropic` provider |
-| 8 | Models your plan can't access are silently dropped |
+| 8 | Free-tier models (`:free` / `-free` in ID) get a `(Free)` suffix in the display name |
+| 9 | Models your plan can't access are silently dropped |
 
 ### Startup performance
 
