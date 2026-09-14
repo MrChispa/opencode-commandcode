@@ -38,6 +38,12 @@ interface CacheShape {
 const isAnthropicModel = (id: string): boolean =>
   id.startsWith("claude-") || id.startsWith("anthropic/")
 
+const isFreeModel = (id: string): boolean =>
+  id.includes(":free") || id.includes("-free")
+
+const displayName = (id: string, name: string): string =>
+  isFreeModel(id) ? `${name} (Free)` : name
+
 async function readKeyFile(): Promise<string | null> {
   try {
     const file = Bun.file(`${process.env.HOME ?? ""}/.config/opencode/secrets/commandcode-key`)
@@ -55,7 +61,7 @@ async function fetchCatalog(): Promise<Array<{ id: string; name: string }>> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const body = (await res.json()) as { data?: Array<{ id: string; name?: string }> }
   const list = Array.isArray(body) ? body : body.data ?? []
-  return list.map((m) => ({ id: m.id, name: m.name || m.id }))
+  return list.map((m) => ({ id: m.id, name: displayName(m.id, m.name || m.id) }))
 }
 
 // ─── Probe ──────────────────────────────────────────────────────────────────
