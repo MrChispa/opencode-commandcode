@@ -60,38 +60,54 @@ async function fetchCatalog(): Promise<Array<{ id: string; name: string }>> {
 
 // ─── Probe ──────────────────────────────────────────────────────────────────
 
+interface ProbeOutcome {
+  format: ModelFormat  // best guess for format
+  rateLimited: boolean // true if model is in plan but temporarily unavailable
+}
+
 async function probeModel(
   id: string,
   apiKey: string,
-): Promise<ModelFormat | null> {
+): Promise<ProbeOutcome | null> {
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${apiKey}`,
   }
 
-  // Known Anthropic model → skip OpenAI probe
+  // Known Anthropic model → skip OpenAI probe, go straight to /messages
   if (isAnthropicModel(id)) {
-    return (await tryEndpoint(`${BASE_URL}/messages`, id, headers)) ? "anthropic" : null
+    const result = await tryEndpoint(`${BASE_URL}/messages`, id, headers)
+    if (result === "ok" || result === "rate-limited") {
+      return { format: "anthropic", rateLimited: result === "rate-limited" }
+    }
+    return null
   }
 
   // Try OpenAI-compatible first
-  if (await tryEndpoint(`${BASE_URL}/chat/completions`, id, headers)) {
-    return "openai"
+  const openaiResult = await tryEndpoint(`${BASE_URL}/chat/completions`, id, headers)
+  if (openaiResult === "ok" || openaiResult === "rate-limited") {
+    return { format: "openai", rateLimited: openaiResult === "rate-limited" }
   }
 
   // Fallback: maybe it's an Anthropic-format model with non-obvious ID
-  if (await tryEndpoint(`${BASE_URL}/messages`, id, headers)) {
-    return "anthropic"
+  if (openaiResult === "retry-anthropic") {
+    const anthropicResult = await tryEndpoint(`${BASE_URL}/messages`, id, headers)
+    if (anthropicResult === "ok" || anthropicResult === "rate-limited") {
+      return { format: "anthropic", rateLimited: anthropicResult === "rate-limited" }
+    }
   }
 
   return null
 }
 
+// Probe result: ok | retry-anthropic | rate-limited | no-access
+type ProbeResult = "ok" | "retry-anthropic" | "rate-limited" | "no-access"
+
 async function tryEndpoint(
   url: string,
   modelId: string,
   headers: Record<string, string>,
-): Promise<boolean> {
+): Promise<ProbeResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
   try {
@@ -105,7 +121,7 @@ async function tryEndpoint(
       }),
       signal: controller.signal,
     })
-    if (res.ok) return true
+    if (res.ok) return "ok"
 
     const err = (await res.json().catch(() => ({}))) as {
       error?: { message?: string; code?: string }
@@ -115,19 +131,24 @@ async function tryEndpoint(
 
     // "must be called via /messages" → signal to try Anthropic
     if (url.includes("/chat/completions") && msg.includes("/messages")) {
-      return false // will retry with /messages
+      return "retry-anthropic"
     }
 
-    // Not in plan, rate limit, or unavailable → skip
-    return false
+    // Rate limit or temporarily unavailable → model IS in plan, just busy
+    if (code === "rate_limit_error" || msg.includes("temporarily unavailable")) {
+      return "rate-limited"
+    }
+
+    // Not in plan or other error
+    return "no-access"
   } catch {
-    return false
+    return "no-access"
   } finally {
     clearTimeout(timer)
   }
 }
 
-// ─── Smart probing: only check new/unknown models ──────────────────────────
+// ─── Smart probing: check new models + retry rate-limited ones ─────────────
 
 async function syncModels(
   catalog: Array<{ id: string; name: string }>,
@@ -141,21 +162,42 @@ async function syncModels(
   const knownIds = new Set([...Object.keys(openai), ...Object.keys(anthropic)])
   const toProbe = catalog.filter((m) => !knownIds.has(m.id))
 
+  // Probe new models in parallel batches
   if (toProbe.length > 0) {
-    // Probe new models in parallel batches
     for (let i = 0; i < toProbe.length; i += CONCURRENCY) {
       const batch = toProbe.slice(i, i + CONCURRENCY)
       const results = await Promise.all(
         batch.map(async (m) => {
-          const format = await probeModel(m.id, apiKey)
-          return { id: m.id, name: m.name, format }
+          const outcome = await probeModel(m.id, apiKey)
+          return { id: m.id, name: m.name, outcome }
         }),
       )
       for (const r of results) {
-        if (r.format === "openai") openai[r.id] = { name: r.name, format: "openai" }
-        else if (r.format === "anthropic") anthropic[r.id] = { name: r.name, format: "anthropic" }
+        if (!r.outcome) continue // not in plan or probe failed
+        const target = r.outcome.format === "anthropic" ? anthropic : openai
+        target[r.id] = { name: r.name, format: r.outcome.format }
       }
     }
+  }
+
+  // Always retry rate-limited models from previous run (might be available now)
+  // Rate-limited models are already in openai/anthropic cache — we just verify they still work
+  const allCached = [
+    ...Object.keys(openai).map((id) => ({ id, format: "openai" as const })),
+    ...Object.keys(anthropic).map((id) => ({ id, format: "anthropic" as const })),
+  ]
+
+  // Re-probe a sample to keep the list fresh (every 4th model, to stay fast)
+  const toRefresh = allCached.filter((_, idx) => idx % 4 === 0)
+  if (toRefresh.length > 0) {
+    await Promise.all(
+      toRefresh.map(async (m) => {
+        const outcome = await probeModel(m.id, apiKey)
+        if (!outcome) return
+        const target = outcome.format === "anthropic" ? anthropic : openai
+        target[m.id] = { name: m.name, format: outcome.format }
+      }),
+    )
   }
 
   // Remove models from cache that no longer exist in catalog
